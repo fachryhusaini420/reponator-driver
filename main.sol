@@ -65,3 +65,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     error RPD_MaxCheckpointsReached();
 
     // -------------------------------------------------------------------------
+    // CONSTANTS
+    // -------------------------------------------------------------------------
+
+    uint256 public constant RPD_MAX_SUPPLY = 9999;
+    uint256 public constant RPD_MAX_CHASSIS_TYPES = 32;
+    uint256 public constant RPD_MAX_ENGINE_TIER = 7;
+    uint256 public constant RPD_MAX_STAGES = 24;
+    uint256 public constant RPD_MAX_CHECKPOINTS_PER_STAGE = 16;
+    uint256 public constant RPD_BATCH_MINT_CAP = 12;
+    uint256 public constant RPD_LAP_TIME_SCALE_MS = 999999;
+    bytes32 public constant RPD_TRACK_SALT = bytes32(uint256(0x2f4a6c8e0b2d5f7a9c1e4f6a8b0d2e5f7a9c1e4f6a8b0d2e5f7a9c1e4f6a8b0d2));
+
+    // -------------------------------------------------------------------------
+    // IMMUTABLE
+    // -------------------------------------------------------------------------
+
+    address public immutable pitBossDeploy;
+    address public immutable raceDirectorDeploy;
+    address public immutable treasury;
+    address public immutable prizeVault;
+    uint256 public immutable deployBlock;
+    bytes32 public immutable trackDomain;
+
+    // -------------------------------------------------------------------------
+    // STATE
+    // -------------------------------------------------------------------------
+
+    address public pitBoss;
+    address public raceDirector;
+    uint256 public nextTokenId;
+    string private _baseTokenURI;
+    bool private _pausedByRole;
+    mapping(uint256 => uint8) public carChassisType;
+    mapping(uint256 => uint8) public carEngineTier;
+    mapping(uint256 => uint256) public carMintBlock;
+
+    struct StageConfig {
+        uint8 requiredMinTier;
+        uint32 requiredChassisMask;
+        bool configured;
+    }
+    mapping(uint8 => StageConfig) public stageConfigs;
+    mapping(uint8 => mapping(uint8 => uint256)) public checkpointLapTimeMaxMs;
+    mapping(uint8 => uint8) public checkpointCountByStage;
+    mapping(address => mapping(uint8 => bool)) public stageUnlockedByDriver;
+    mapping(address => mapping(uint8 => uint8)) public checkpointReachedByDriver;
+    mapping(uint8 => address) public stageLeader;
+    mapping(uint8 => uint256) public stageBestLapMs;
+    mapping(uint8 => uint256) public mintPriceByChassis;
+    uint256 public treasuryBalance;
+    uint8 public stageCount;
+    uint8[] private _configuredStageIds;
+
+    modifier whenNotPausedContract() {
+        if (paused() || _pausedByRole) revert RPD_CollectionPaused();
+        _;
+    }
+
+    modifier onlyPitBoss() {
+        if (msg.sender != pitBoss && msg.sender != pitBossDeploy) revert RPD_NotPitBoss();
+        _;
+    }
+
+    modifier onlyRaceDirector() {
+        if (msg.sender != raceDirector && msg.sender != raceDirectorDeploy) revert RPD_NotRaceDirector();
+        _;
+    }
