@@ -333,3 +333,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         StageConfig storage c = stageConfigs[stageId];
         return (c.requiredMinTier, c.requiredChassisMask, c.configured);
     }
+
+    function paused() public view virtual override returns (bool) {
+        return _pausedByRole || super.paused();
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
+        return super.tokenURI(tokenId);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize) internal override(ERC721, ERC721Enumerable) {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
+    }
+
+    receive() external payable {
+        treasuryBalance += msg.value;
+    }
+
+    // -------------------------------------------------------------------------
+    // BATCH MINT
+    // -------------------------------------------------------------------------
+
+    function mintCarBatch(address to, uint8[] calldata chassisTypes, uint8[] calldata engineTiers) external payable whenNotPausedContract nonReentrant returns (uint256[] memory tokenIds) {
+        if (to == address(0)) revert RPD_ZeroAddress();
+        uint256 n = chassisTypes.length;
+        if (n != engineTiers.length) revert RPD_ArrayLengthMismatch();
+        if (n > RPD_BATCH_MINT_CAP) revert RPD_BatchTooLarge();
+        if (nextTokenId + n - 1 > RPD_MAX_SUPPLY) revert RPD_MaxSupplyReached();
+        uint256 totalPrice = 0;
+        for (uint256 i = 0; i < n; i++) {
+            if (chassisTypes[i] >= RPD_MAX_CHASSIS_TYPES) revert RPD_InvalidChassisType();
+            if (engineTiers[i] > RPD_MAX_ENGINE_TIER) revert RPD_InvalidEngineTier();
+            totalPrice += mintPriceByChassis[chassisTypes[i]];
+        }
+        if (msg.value < totalPrice) revert RPD_InsufficientPayment();
+        tokenIds = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            uint256 tokenId = nextTokenId++;
+            carChassisType[tokenId] = chassisTypes[i];
+            carEngineTier[tokenId] = engineTiers[i];
+            carMintBlock[tokenId] = block.number;
+            _safeMint(to, tokenId);
+            tokenIds[i] = tokenId;
+            emit CarMinted(tokenId, to, chassisTypes[i], engineTiers[i], mintPriceByChassis[chassisTypes[i]], block.number);
+        }
+        treasuryBalance += totalPrice;
+        if (msg.value > totalPrice) {
+            (bool refund,) = msg.sender.call{value: msg.value - totalPrice}("");
+            if (!refund) revert RPD_TransferFailed();
+        }
+        emit BatchMinted(to, tokenIds, totalPrice, block.number);
+        return tokenIds;
+    }
+
+    // -------------------------------------------------------------------------
+    // VIEWS: PROGRESSION & LEADERBOARD
+    // -------------------------------------------------------------------------
+
+    function isStageUnlocked(address driver, uint8 stageId) external view returns (bool) {
+        return stageUnlockedByDriver[driver][stageId];
