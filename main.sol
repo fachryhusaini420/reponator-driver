@@ -266,3 +266,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         emit LapRecorded(driver, tokenId, stageId, lapTimeMs, block.number);
         if (stageBestLapMs[stageId] == 0 || lapTimeMs < stageBestLapMs[stageId]) {
             stageBestLapMs[stageId] = lapTimeMs;
+            stageLeader[stageId] = driver;
+            emit LeaderboardUpdated(stageId, driver, lapTimeMs, block.number);
+        }
+    }
+
+    function reachCheckpoint(address driver, uint8 stageId, uint8 checkpointIndex, uint256 lapTimeMs) external onlyRaceDirector whenNotPausedContract {
+        if (!stageUnlockedByDriver[driver][stageId]) revert RPD_StageNotUnlocked();
+        if (checkpointIndex >= checkpointCountByStage[stageId]) revert RPD_InvalidCheckpointIndex();
+        uint256 maxMs = checkpointLapTimeMaxMs[stageId][checkpointIndex];
+        if (maxMs > 0 && lapTimeMs > maxMs) revert RPD_LapTimeTooHigh();
+        if (checkpointReachedByDriver[driver][stageId] < checkpointIndex + 1)
+            checkpointReachedByDriver[driver][stageId] = checkpointIndex + 1;
+        emit CheckpointReached(driver, stageId, checkpointIndex, lapTimeMs, block.number);
+    }
+
+    function withdrawProceeds(address to, uint256 amountWei) external onlyPitBoss nonReentrant {
+        if (to == address(0)) revert RPD_ZeroAddress();
+        if (amountWei == 0) revert RPD_WithdrawZero();
+        if (amountWei > treasuryBalance) revert RPD_InsufficientPayment();
+        treasuryBalance -= amountWei;
+        (bool ok,) = to.call{value: amountWei}("");
+        if (!ok) revert RPD_TransferFailed();
+        emit ProceedsWithdrawn(to, amountWei, block.number);
+    }
+
+    function getCar(uint256 tokenId) external view returns (uint8 chassisType, uint8 engineTier, uint256 mintBlock) {
+        if (ownerOf(tokenId) == address(0) && tokenId >= nextTokenId) revert RPD_InvalidTokenId();
+        return (carChassisType[tokenId], carEngineTier[tokenId], carMintBlock[tokenId]);
+    }
+
+    function tokenQualifiesForStage(uint256 tokenId, uint8 stageId) external view returns (bool) {
+        return _tokenQualifiesForStage(tokenId, stageId);
+    }
+
+    function getDriverProgress(address driver) external view returns (uint8[] memory unlockedStages, uint8[] memory checkpointsReached) {
+        uint8[] memory stages = new uint8[](_configuredStageIds.length);
+        uint8[] memory cps = new uint8[](_configuredStageIds.length);
+        uint256 j = 0;
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            uint8 sid = _configuredStageIds[i];
+            if (stageUnlockedByDriver[driver][sid]) {
+                stages[j] = sid;
+                cps[j] = checkpointReachedByDriver[driver][sid];
+                j++;
+            }
+        }
+        unlockedStages = new uint8[](j);
+        checkpointsReached = new uint8[](j);
+        for (uint256 k = 0; k < j; k++) {
+            unlockedStages[k] = stages[k];
+            checkpointsReached[k] = cps[k];
+        }
+        return (unlockedStages, checkpointsReached);
+    }
+
+    function getStageLeader(uint8 stageId) external view returns (address driver, uint256 bestLapMs) {
+        return (stageLeader[stageId], stageBestLapMs[stageId]);
+    }
+
+    function getConfiguredStageIds() external view returns (uint8[] memory) {
+        return _configuredStageIds;
+    }
+
+    function getStageConfig(uint8 stageId) external view returns (uint8 requiredMinTier, uint32 requiredChassisMask, bool configured) {
+        StageConfig storage c = stageConfigs[stageId];
+        return (c.requiredMinTier, c.requiredChassisMask, c.configured);
+    }
