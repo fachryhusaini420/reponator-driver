@@ -132,3 +132,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         if (msg.sender != raceDirector && msg.sender != raceDirectorDeploy) revert RPD_NotRaceDirector();
         _;
     }
+
+    constructor() ERC721("Reponator Driver", "RPD") {
+        pitBossDeploy = address(0x4B2c6E8f0A3d5F7b9C1e4F6a8B0d2E5f7A9c1D4e6);
+        raceDirectorDeploy = address(0x5C3d7F9a1B4e6D8f0A2c5E7b9D1f3A6c8E0b2D5f7);
+        treasury = address(0x6D4e8F0a2B5c7E9d1F3a6C8e0B2d5F7a9C1e4D6f8);
+        prizeVault = address(0x7E5f9A1b3C6d8F0a2B5e7D9f1A4c6E8b0D2f5A7c9);
+        deployBlock = block.number;
+        trackDomain = keccak256(abi.encodePacked(RPD_TRACK_SALT, block.chainid, block.timestamp, address(this)));
+        pitBoss = pitBossDeploy;
+        raceDirector = raceDirectorDeploy;
+        nextTokenId = 1;
+        mintPriceByChassis[0] = 0.02 ether;
+        mintPriceByChassis[1] = 0.03 ether;
+        mintPriceByChassis[2] = 0.05 ether;
+    }
+
+    function pauseCollection() external onlyPitBoss {
+        _pausedByRole = true;
+        emit CollectionPaused(msg.sender, block.number);
+    }
+
+    function unpauseCollection() external onlyPitBoss {
+        _pausedByRole = false;
+        emit CollectionUnpaused(msg.sender, block.number);
+    }
+
+    function setPitBoss(address newPitBoss) external onlyPitBoss {
+        if (newPitBoss == address(0)) revert RPD_ZeroAddress();
+        address prev = pitBoss;
+        pitBoss = newPitBoss;
+        emit PitBossUpdated(prev, newPitBoss);
+    }
+
+    function setRaceDirector(address newRaceDirector) external onlyPitBoss {
+        if (newRaceDirector == address(0)) revert RPD_ZeroAddress();
+        address prev = raceDirector;
+        raceDirector = newRaceDirector;
+        emit RaceDirectorUpdated(prev, newRaceDirector);
+    }
+
+    function setMintPrice(uint8 chassisType, uint256 priceWei) external onlyPitBoss {
+        if (chassisType >= RPD_MAX_CHASSIS_TYPES) revert RPD_InvalidChassisType();
+        uint256 prev = mintPriceByChassis[chassisType];
+        mintPriceByChassis[chassisType] = priceWei;
+        emit MintPriceSet(chassisType, prev, priceWei, block.number);
+    }
+
+    function setBaseURI(string calldata baseURI_) external onlyPitBoss {
+        string memory prev = _baseTokenURI;
+        _baseTokenURI = baseURI_;
+        emit BaseURISet(prev, baseURI_, block.number);
+    }
+
+    function configureStage(uint8 stageId, uint8 requiredMinTier, uint32 requiredChassisMask) external onlyPitBoss {
+        if (stageId >= RPD_MAX_STAGES) revert RPD_InvalidStageId();
+        if (stageCount < RPD_MAX_STAGES && !stageConfigs[stageId].configured) {
+            _configuredStageIds.push(stageId);
+            stageCount++;
+        }
+        stageConfigs[stageId] = StageConfig({ requiredMinTier: requiredMinTier, requiredChassisMask: requiredChassisMask, configured: true });
+        emit StageConfigured(stageId, requiredMinTier, requiredChassisMask, block.number);
+    }
+
+    function configureCheckpoint(uint8 stageId, uint8 checkpointIndex, uint256 lapTimeMaxMs) external onlyPitBoss {
+        if (stageId >= RPD_MAX_STAGES) revert RPD_InvalidStageId();
+        if (checkpointIndex >= RPD_MAX_CHECKPOINTS_PER_STAGE) revert RPD_MaxCheckpointsReached();
+        checkpointLapTimeMaxMs[stageId][checkpointIndex] = lapTimeMaxMs;
