@@ -400,3 +400,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
 
     function isStageUnlocked(address driver, uint8 stageId) external view returns (bool) {
         return stageUnlockedByDriver[driver][stageId];
+    }
+
+    function getCheckpointReached(address driver, uint8 stageId) external view returns (uint8) {
+        return checkpointReachedByDriver[driver][stageId];
+    }
+
+    function getCheckpointMaxTime(uint8 stageId, uint8 checkpointIndex) external view returns (uint256) {
+        return checkpointLapTimeMaxMs[stageId][checkpointIndex];
+    }
+
+    function getCheckpointCount(uint8 stageId) external view returns (uint8) {
+        return checkpointCountByStage[stageId];
+    }
+
+    function getTreasuryBalance() external view returns (uint256) {
+        return treasuryBalance;
+    }
+
+    function getMintPrice(uint8 chassisType) external view returns (uint256) {
+        if (chassisType >= RPD_MAX_CHASSIS_TYPES) return 0;
+        return mintPriceByChassis[chassisType];
+    }
+
+    function getTotalMinted() external view returns (uint256) {
+        return nextTokenId - 1;
+    }
+
+    function getTrackDomain() external view returns (bytes32) {
+        return trackDomain;
+    }
+
+    function getImmutableAddresses() external view returns (address pitBoss_, address raceDirector_, address treasury_, address prizeVault_) {
+        return (pitBossDeploy, raceDirectorDeploy, treasury, prizeVault);
+    }
+
+    function getDeployBlock() external view returns (uint256) {
+        return deployBlock;
+    }
+
+    function getLeaderboardSlice(uint8 fromStageId, uint8 toStageId) external view returns (
+        uint8[] memory stageIds,
+        address[] memory leaders,
+        uint256[] memory bestLapsMs
+    ) {
+        if (toStageId > fromStageId + 32) toStageId = uint8(fromStageId + 32);
+        if (toStageId >= RPD_MAX_STAGES) toStageId = uint8(RPD_MAX_STAGES - 1);
+        uint256 n = toStageId >= fromStageId ? toStageId - fromStageId + 1 : 0;
+        stageIds = new uint8[](n);
+        leaders = new address[](n);
+        bestLapsMs = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            uint8 sid = uint8(fromStageId + i);
+            stageIds[i] = sid;
+            leaders[i] = stageLeader[sid];
+            bestLapsMs[i] = stageBestLapMs[sid];
+        }
+        return (stageIds, leaders, bestLapsMs);
+    }
+
+    function getCarsByOwner(address owner) external view returns (uint256[] memory tokenIds) {
+        uint256 balance = balanceOf(owner);
+        tokenIds = new uint256[](balance);
+        for (uint256 i = 0; i < balance; i++) tokenIds[i] = tokenOfOwnerByIndex(owner, i);
+        return tokenIds;
+    }
+
+    function getCarTraits(uint256 tokenId) external view returns (uint8 chassis, uint8 engineTier, uint256 mintBlock) {
