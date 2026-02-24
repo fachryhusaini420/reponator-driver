@@ -199,3 +199,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         if (stageId >= RPD_MAX_STAGES) revert RPD_InvalidStageId();
         if (checkpointIndex >= RPD_MAX_CHECKPOINTS_PER_STAGE) revert RPD_MaxCheckpointsReached();
         checkpointLapTimeMaxMs[stageId][checkpointIndex] = lapTimeMaxMs;
+        if (checkpointIndex >= checkpointCountByStage[stageId]) checkpointCountByStage[stageId] = checkpointIndex + 1;
+        emit CheckpointConfigured(stageId, checkpointIndex, lapTimeMaxMs, block.number);
+    }
+
+    function _tokenQualifiesForStage(uint256 tokenId, uint8 stageId) internal view returns (bool) {
+        if (stageId >= RPD_MAX_STAGES || !stageConfigs[stageId].configured) return false;
+        StageConfig storage cfg = stageConfigs[stageId];
+        uint8 chassis = carChassisType[tokenId];
+        uint8 tier = carEngineTier[tokenId];
+        if (tier < cfg.requiredMinTier) return false;
+        if (cfg.requiredChassisMask != 0 && ((uint32(1) << chassis) & cfg.requiredChassisMask) == 0) return false;
+        return true;
+    }
+
+    function mintCar(address to, uint8 chassisType, uint8 engineTier) external payable whenNotPausedContract nonReentrant returns (uint256 tokenId) {
+        if (to == address(0)) revert RPD_ZeroAddress();
+        if (chassisType >= RPD_MAX_CHASSIS_TYPES) revert RPD_InvalidChassisType();
+        if (engineTier > RPD_MAX_ENGINE_TIER) revert RPD_InvalidEngineTier();
+        if (nextTokenId > RPD_MAX_SUPPLY) revert RPD_MaxSupplyReached();
+        uint256 price = mintPriceByChassis[chassisType];
+        if (msg.value < price) revert RPD_InsufficientPayment();
+
+        tokenId = nextTokenId++;
+        carChassisType[tokenId] = chassisType;
+        carEngineTier[tokenId] = engineTier;
+        carMintBlock[tokenId] = block.number;
+        _safeMint(to, tokenId);
+        treasuryBalance += price;
+        if (msg.value > price) {
+            (bool refund,) = msg.sender.call{value: msg.value - price}("");
+            if (!refund) revert RPD_TransferFailed();
+        }
+        emit CarMinted(tokenId, to, chassisType, engineTier, price, block.number);
+        return tokenId;
+    }
+
+    function unlockStage(address driver, uint256 tokenId) external onlyRaceDirector whenNotPausedContract {
+        if (ownerOf(tokenId) != driver) revert RPD_NotTokenOwner();
+        uint8 stageId = 0;
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            stageId = _configuredStageIds[i];
+            if (stageUnlockedByDriver[driver][stageId]) continue;
+            if (!_tokenQualifiesForStage(tokenId, stageId)) revert RPD_TokenDoesNotQualify();
+            stageUnlockedByDriver[driver][stageId] = true;
+            emit StageUnlocked(driver, stageId, tokenId, block.number);
+            return;
+        }
+        revert RPD_StageNotUnlocked();
+    }
+
+    function unlockStageExplicit(address driver, uint256 tokenId, uint8 stageId) external onlyRaceDirector whenNotPausedContract {
+        if (ownerOf(tokenId) != driver) revert RPD_NotTokenOwner();
+        if (!_tokenQualifiesForStage(tokenId, stageId)) revert RPD_TokenDoesNotQualify();
+        if (stageUnlockedByDriver[driver][stageId]) return;
+        stageUnlockedByDriver[driver][stageId] = true;
+        emit StageUnlocked(driver, stageId, tokenId, block.number);
+    }
+
+    function recordLap(address driver, uint256 tokenId, uint8 stageId, uint256 lapTimeMs) external onlyRaceDirector whenNotPausedContract {
+        if (ownerOf(tokenId) != driver) revert RPD_NotTokenOwner();
+        if (!stageUnlockedByDriver[driver][stageId]) revert RPD_StageNotUnlocked();
+        if (lapTimeMs > RPD_LAP_TIME_SCALE_MS) revert RPD_LapTimeTooHigh();
+        uint256 maxMs = checkpointLapTimeMaxMs[stageId][checkpointReachedByDriver[driver][stageId]];
+        if (maxMs > 0 && lapTimeMs > maxMs) revert RPD_LapTimeTooHigh();
+        emit LapRecorded(driver, tokenId, stageId, lapTimeMs, block.number);
+        if (stageBestLapMs[stageId] == 0 || lapTimeMs < stageBestLapMs[stageId]) {
+            stageBestLapMs[stageId] = lapTimeMs;
