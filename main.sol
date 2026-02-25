@@ -735,3 +735,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     // -------------------------------------------------------------------------
 
     function getStageStats(uint8 stageId) external view returns (
+        address leader,
+        uint256 bestLapMs,
+        bool configured,
+        uint8 checkpointCount
+    ) {
+        StageConfig storage c = stageConfigs[stageId];
+        return (stageLeader[stageId], stageBestLapMs[stageId], c.configured, checkpointCountByStage[stageId]);
+    }
+
+    function getAllStageLeaders() external view returns (uint8[] memory stageIds, address[] memory leaders, uint256[] memory bestLapsMs) {
+        uint256 n = _configuredStageIds.length;
+        stageIds = new uint8[](n);
+        leaders = new address[](n);
+        bestLapsMs = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            uint8 sid = _configuredStageIds[i];
+            stageIds[i] = sid;
+            leaders[i] = stageLeader[sid];
+            bestLapsMs[i] = stageBestLapMs[sid];
+        }
+        return (stageIds, leaders, bestLapsMs);
+    }
+
+    // -------------------------------------------------------------------------
+    // DRIVER STATS
+    // -------------------------------------------------------------------------
+
+    function getDriverStageProgress(address driver, uint8 stageId) external view returns (
+        bool unlocked,
+        uint8 checkpointsReached,
+        uint8 checkpointCount
+    ) {
+        return (
+            stageUnlockedByDriver[driver][stageId],
+            checkpointReachedByDriver[driver][stageId],
+            checkpointCountByStage[stageId]
+        );
+    }
+
+    function getDriverFullProgress(address driver) external view returns (
+        uint8[] memory unlockedStageIds,
+        uint8[] memory checkpointsPerStage,
+        uint256 carCount
+    ) {
+        carCount = balanceOf(driver);
+        uint256 n = 0;
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            if (stageUnlockedByDriver[driver][_configuredStageIds[i]]) n++;
+        }
+        unlockedStageIds = new uint8[](n);
+        checkpointsPerStage = new uint8[](n);
+        uint256 j = 0;
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            uint8 sid = _configuredStageIds[i];
+            if (stageUnlockedByDriver[driver][sid]) {
+                unlockedStageIds[j] = sid;
+                checkpointsPerStage[j] = checkpointReachedByDriver[driver][sid];
+                j++;
+            }
+        }
+        return (unlockedStageIds, checkpointsPerStage, carCount);
+    }
+
+    // -------------------------------------------------------------------------
+    // MULTI-GET CARS
+    // -------------------------------------------------------------------------
+
