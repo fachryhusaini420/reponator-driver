@@ -534,3 +534,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
             stageConfigs[sid] = StageConfig({
                 requiredMinTier: requiredMinTiers[i],
                 requiredChassisMask: requiredChassisMasks[i],
+                configured: true
+            });
+            emit StageConfigured(sid, requiredMinTiers[i], requiredChassisMasks[i], block.number);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // ROLE CHECKS
+    // -------------------------------------------------------------------------
+
+    function isPitBoss(address account) external view returns (bool) {
+        return account == pitBoss || account == pitBossDeploy;
+    }
+
+    function isRaceDirector(address account) external view returns (bool) {
+        return account == raceDirector || account == raceDirectorDeploy;
+    }
+
+    function isTreasury(address account) external view returns (bool) {
+        return account == treasury;
+    }
+
+    function isPrizeVault(address account) external view returns (bool) {
+        return account == prizeVault;
+    }
+
+    // -------------------------------------------------------------------------
+    // CONSTANTS EXPORT
+    // -------------------------------------------------------------------------
+
+    function getConstants() external pure returns (
+        uint256 maxSupply,
+        uint256 maxChassisTypes,
+        uint256 maxEngineTier,
+        uint256 maxStages,
+        uint256 maxCheckpointsPerStage,
+        uint256 batchMintCap
+    ) {
+        return (RPD_MAX_SUPPLY, RPD_MAX_CHASSIS_TYPES, RPD_MAX_ENGINE_TIER, RPD_MAX_STAGES, RPD_MAX_CHECKPOINTS_PER_STAGE, RPD_BATCH_MINT_CAP);
+    }
+
+    // -------------------------------------------------------------------------
+    // PROGRESSION HELPERS
+    // -------------------------------------------------------------------------
+
+    function canUnlockNextStage(address driver) external view returns (bool canUnlock, uint8 nextStageId) {
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            uint8 sid = _configuredStageIds[i];
+            if (!stageUnlockedByDriver[driver][sid]) {
+                return (true, sid);
+            }
+        }
+        return (false, 0);
+    }
+
+    function getStagesUnlockedCount(address driver) external view returns (uint256 count) {
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            if (stageUnlockedByDriver[driver][_configuredStageIds[i]]) count++;
+        }
+        return count;
+    }
+
+    function getTotalCheckpointsReached(address driver) external view returns (uint256 total) {
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            total += checkpointReachedByDriver[driver][_configuredStageIds[i]];
+        }
+        return total;
