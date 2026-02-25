@@ -1003,3 +1003,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         return ownerOf(tokenId);
     }
 
+    // -------------------------------------------------------------------------
+    // ESTIMATE MINT COST
+    // -------------------------------------------------------------------------
+
+    function estimateMintCost(uint8 chassisType) external view returns (uint256 weiAmount) {
+        return mintPriceByChassis[chassisType];
+    }
+
+    function estimateBatchMintCost(uint8[] calldata chassisTypes, uint8[] calldata engineTiers) external view returns (uint256 totalWei) {
+        if (chassisTypes.length != engineTiers.length) return 0;
+        for (uint256 i = 0; i < chassisTypes.length; i++) {
+            if (chassisTypes[i] >= RPD_MAX_CHASSIS_TYPES || engineTiers[i] > RPD_MAX_ENGINE_TIER) continue;
+            totalWei += mintPriceByChassis[chassisTypes[i]];
+        }
+        return totalWei;
+    }
+
+    // -------------------------------------------------------------------------
+    // STAGE COUNT VIEW
+    // -------------------------------------------------------------------------
+
+    function getStageCount() external view returns (uint8) {
+        return stageCount;
+    }
+
+    // -------------------------------------------------------------------------
+    // CHECKPOINT MAX TIMES FOR STAGE (full array)
+    // -------------------------------------------------------------------------
+
+    function getCheckpointMaxTimes(uint8 stageId) external view returns (uint256[] memory maxTimesMs) {
+        uint8 count = checkpointCountByStage[stageId];
+        maxTimesMs = new uint256[](count);
+        for (uint8 i = 0; i < count; i++) maxTimesMs[i] = checkpointLapTimeMaxMs[stageId][i];
+        return maxTimesMs;
+    }
+
+    // -------------------------------------------------------------------------
+    // DRIVER QUALIFYING TOKEN COUNT FOR STAGE
+    // -------------------------------------------------------------------------
+
+    function getQualifyingTokenCount(address owner, uint8 stageId) external view returns (uint256 count) {
+        uint256 bal = balanceOf(owner);
+        for (uint256 i = 0; i < bal; i++) {
+            if (_tokenQualifiesForStage(tokenOfOwnerByIndex(owner, i), stageId)) count++;
+        }
+        return count;
+    }
+
+    // -------------------------------------------------------------------------
+    // HAS DRIVER UNLOCKED ANY STAGE
+    // -------------------------------------------------------------------------
+
+    function hasDriverUnlockedAnyStage(address driver) external view returns (bool) {
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            if (stageUnlockedByDriver[driver][_configuredStageIds[i]]) return true;
+        }
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // LAST MINTED TOKEN ID
+    // -------------------------------------------------------------------------
+
+    function getLastMintedTokenId() external view returns (uint256) {
+        if (nextTokenId <= 1) return 0;
+        return nextTokenId - 1;
+    }
