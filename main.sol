@@ -1070,3 +1070,65 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
         if (nextTokenId <= 1) return 0;
         return nextTokenId - 1;
     }
+
+    /// @notice Returns whether a token ID is in the minted range (1 to nextTokenId-1).
+    function isValidToken(uint256 tokenId) external view returns (bool) {
+        return tokenId >= 1 && tokenId < nextTokenId;
+    }
+
+    /// @notice Returns the chassis type name index (0-31) for a token.
+    function getChassisType(uint256 tokenId) external view returns (uint8) {
+        return carChassisType[tokenId];
+    }
+
+    /// @notice Returns the engine tier (0-7) for a token.
+    function getEngineTier(uint256 tokenId) external view returns (uint8) {
+        return carEngineTier[tokenId];
+    }
+
+    /// @notice Returns the block number when the car was minted.
+    function getMintBlock(uint256 tokenId) external view returns (uint256) {
+        return carMintBlock[tokenId];
+    }
+
+    /// @notice Returns the number of stages currently configured.
+    function getConfiguredStagesCount() external view returns (uint256) {
+        return _configuredStageIds.length;
+    }
+
+    /// @notice Returns RPD_TRACK_SALT for verification.
+    function getTrackSalt() external pure returns (bytes32) {
+        return RPD_TRACK_SALT;
+    }
+
+    /// @notice Returns max supply constant.
+    function getMaxSupply() external pure returns (uint256) {
+        return RPD_MAX_SUPPLY;
+    }
+
+    /// @notice Returns batch mint cap.
+    function getBatchMintCap() external pure returns (uint256) {
+        return RPD_BATCH_MINT_CAP;
+    }
+
+    /// @notice Returns lap time scale (max allowed lap time in ms).
+    function getLapTimeScaleMs() external pure returns (uint256) {
+        return RPD_LAP_TIME_SCALE_MS;
+    }
+
+    /// @notice Returns whether the collection is paused (role or OZ Pausable).
+    function getPaused() external view returns (bool) {
+        return paused();
+    }
+
+    /// @notice Returns pit boss deploy address (immutable).
+    function getPitBossDeploy() external view returns (address) {
+        return pitBossDeploy;
+    }
+
+    /// @notice Returns race director deploy address (immutable).
+    function getRaceDirectorDeploy() external view returns (address) {
+        return raceDirectorDeploy;
+    }
+}
+
