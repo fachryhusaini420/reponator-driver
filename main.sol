@@ -936,3 +936,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     // -------------------------------------------------------------------------
     // BATCH UNLOCK (convenience for race director)
     // -------------------------------------------------------------------------
+
+    function unlockStageForDriverWithToken(address driver, uint256 tokenId) external onlyRaceDirector whenNotPausedContract {
+        if (ownerOf(tokenId) != driver) revert RPD_NotTokenOwner();
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            uint8 sid = _configuredStageIds[i];
+            if (stageUnlockedByDriver[driver][sid]) continue;
+            if (!_tokenQualifiesForStage(tokenId, sid)) continue;
+            stageUnlockedByDriver[driver][sid] = true;
+            emit StageUnlocked(driver, sid, tokenId, block.number);
+            return;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // REACH CHECKPOINT BATCH
+    // -------------------------------------------------------------------------
+
+    function reachCheckpointBatch(
+        address[] calldata drivers,
+        uint8[] calldata stageIds,
+        uint8[] calldata checkpointIndices,
+        uint256[] calldata lapTimesMs
+    ) external onlyRaceDirector whenNotPausedContract {
+        if (drivers.length != stageIds.length || drivers.length != checkpointIndices.length || drivers.length != lapTimesMs.length) revert RPD_ArrayLengthMismatch();
+        if (drivers.length > RPD_BATCH_MINT_CAP) revert RPD_BatchTooLarge();
+        for (uint256 i = 0; i < drivers.length; i++) {
+            if (!stageUnlockedByDriver[drivers[i]][stageIds[i]]) continue;
+            if (checkpointIndices[i] >= checkpointCountByStage[stageIds[i]]) continue;
+            uint256 maxMs = checkpointLapTimeMaxMs[stageIds[i]][checkpointIndices[i]];
+            if (maxMs > 0 && lapTimesMs[i] > maxMs) continue;
+            if (checkpointReachedByDriver[drivers[i]][stageIds[i]] < checkpointIndices[i] + 1)
+                checkpointReachedByDriver[drivers[i]][stageIds[i]] = checkpointIndices[i] + 1;
+            emit CheckpointReached(drivers[i], stageIds[i], checkpointIndices[i], lapTimesMs[i], block.number);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // STAGE CONFIG BATCH VIEW
+    // -------------------------------------------------------------------------
+
+    function getStageConfigsBatch(uint8[] calldata stageIds) external view returns (
+        uint8[] memory requiredMinTiers,
+        uint32[] memory requiredChassisMasks,
+        bool[] memory configured
+    ) {
+        uint256 n = stageIds.length;
+        if (n > 32) n = 32;
+        requiredMinTiers = new uint8[](n);
+        requiredChassisMasks = new uint32[](n);
+        configured = new bool[](n);
+        for (uint256 i = 0; i < n; i++) {
+            StageConfig storage c = stageConfigs[stageIds[i]];
+            requiredMinTiers[i] = c.requiredMinTier;
+            requiredChassisMasks[i] = c.requiredChassisMask;
+            configured[i] = c.configured;
+        }
+        return (requiredMinTiers, requiredChassisMasks, configured);
+    }
+
+    // -------------------------------------------------------------------------
+    // OWNER OF TOKEN (convenience)
+    // -------------------------------------------------------------------------
+
+    function getOwnerOfCar(uint256 tokenId) external view returns (address) {
+        return ownerOf(tokenId);
+    }
+
