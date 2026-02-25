@@ -802,3 +802,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     // MULTI-GET CARS
     // -------------------------------------------------------------------------
 
+    function getCarsTraits(uint256[] calldata tokenIds) external view returns (
+        uint8[] memory chassisTypes,
+        uint8[] memory engineTiers,
+        uint256[] memory mintBlocks
+    ) {
+        uint256 n = tokenIds.length;
+        if (n > 64) n = 64;
+        chassisTypes = new uint8[](n);
+        engineTiers = new uint8[](n);
+        mintBlocks = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            chassisTypes[i] = carChassisType[tokenIds[i]];
+            engineTiers[i] = carEngineTier[tokenIds[i]];
+            mintBlocks[i] = carMintBlock[tokenIds[i]];
+        }
+        return (chassisTypes, engineTiers, mintBlocks);
+    }
+
+    // -------------------------------------------------------------------------
+    // BASE URI & METADATA
+    // -------------------------------------------------------------------------
+
+    function getBaseURI() external view returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    // -------------------------------------------------------------------------
+    // TREASURY & FEE
+    // -------------------------------------------------------------------------
+
+    function getTreasuryAddress() external view returns (address) {
+        return treasury;
+    }
+
+    function getPrizeVaultAddress() external view returns (address) {
+        return prizeVault;
+    }
+
+    // -------------------------------------------------------------------------
+    // OPERATIONAL
+    // -------------------------------------------------------------------------
+
+    function isOperational() external view returns (bool) {
+        return !paused();
+    }
+
+    function getPitBoss() external view returns (address) {
+        return pitBoss;
+    }
+
+    function getRaceDirector() external view returns (address) {
+        return raceDirector;
+    }
+
+    // -------------------------------------------------------------------------
+    // DOMAIN & DEPLOY
+    // -------------------------------------------------------------------------
+
+    function getTrackDomainSalt() external pure returns (bytes32) {
+        return RPD_TRACK_SALT;
+    }
+
+    function getDeployMetadata() external view returns (uint256 blockNum, bytes32 domain) {
+        return (deployBlock, trackDomain);
+    }
+
+    // -------------------------------------------------------------------------
