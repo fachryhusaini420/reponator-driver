@@ -601,3 +601,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
             total += checkpointReachedByDriver[driver][_configuredStageIds[i]];
         }
         return total;
+    }
+
+    // -------------------------------------------------------------------------
+    // TOKEN ID RANGE
+    // -------------------------------------------------------------------------
+
+    function getTokenIdRange() external view returns (uint256 minId, uint256 maxId, uint256 nextId) {
+        return (1, nextTokenId - 1, nextTokenId);
+    }
+
+    function carExists(uint256 tokenId) external view returns (bool) {
+        return tokenId > 0 && tokenId < nextTokenId;
+    }
+
+    // -------------------------------------------------------------------------
+    // MINT PRICES BATCH VIEW
+    // -------------------------------------------------------------------------
+
+    function getMintPricesBatch(uint8 fromChassis, uint8 toChassis) external view returns (uint8[] memory types, uint256[] memory prices) {
+        if (toChassis > fromChassis + 32) toChassis = uint8(fromChassis + 32);
+        if (toChassis >= RPD_MAX_CHASSIS_TYPES) toChassis = uint8(RPD_MAX_CHASSIS_TYPES - 1);
+        uint256 n = toChassis >= fromChassis ? toChassis - fromChassis + 1 : 0;
+        types = new uint8[](n);
+        prices = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            uint8 ct = uint8(fromChassis + i);
+            types[i] = ct;
+            prices[i] = mintPriceByChassis[ct];
+        }
+        return (types, prices);
+    }
+
+    // -------------------------------------------------------------------------
+    // CHECKPOINT CONFIG BATCH VIEW
+    // -------------------------------------------------------------------------
+
+    function getCheckpointConfigs(uint8 stageId) external view returns (uint8[] memory indices, uint256[] memory maxTimesMs) {
+        uint8 count = checkpointCountByStage[stageId];
+        indices = new uint8[](count);
+        maxTimesMs = new uint256[](count);
+        for (uint8 i = 0; i < count; i++) {
+            indices[i] = i;
+            maxTimesMs[i] = checkpointLapTimeMaxMs[stageId][i];
+        }
+        return (indices, maxTimesMs);
+    }
+
+    // -------------------------------------------------------------------------
+    // UNLOCK STAGE BATCH (race director unlocks for multiple drivers)
+    // -------------------------------------------------------------------------
+
+    function unlockStageBatch(address[] calldata drivers, uint256[] calldata tokenIds, uint8[] calldata stageIds) external onlyRaceDirector whenNotPausedContract {
+        if (drivers.length != tokenIds.length || drivers.length != stageIds.length) revert RPD_ArrayLengthMismatch();
+        if (drivers.length > RPD_BATCH_MINT_CAP) revert RPD_BatchTooLarge();
+        for (uint256 i = 0; i < drivers.length; i++) {
+            if (ownerOf(tokenIds[i]) != drivers[i]) continue;
+            if (!_tokenQualifiesForStage(tokenIds[i], stageIds[i])) continue;
+            if (stageUnlockedByDriver[drivers[i]][stageIds[i]]) continue;
+            stageUnlockedByDriver[drivers[i]][stageIds[i]] = true;
+            emit StageUnlocked(drivers[i], stageIds[i], tokenIds[i], block.number);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // RECORD LAP BATCH
+    // -------------------------------------------------------------------------
+
