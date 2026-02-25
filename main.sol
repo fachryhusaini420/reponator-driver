@@ -467,3 +467,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     }
 
     function getCarTraits(uint256 tokenId) external view returns (uint8 chassis, uint8 engineTier, uint256 mintBlock) {
+        return (carChassisType[tokenId], carEngineTier[tokenId], carMintBlock[tokenId]);
+    }
+
+    function getQualifyingTokensForStage(address owner, uint8 stageId) external view returns (uint256[] memory tokenIds) {
+        uint256 bal = balanceOf(owner);
+        uint256[] memory temp = new uint256[](bal);
+        uint256 count = 0;
+        for (uint256 i = 0; i < bal; i++) {
+            uint256 tid = tokenOfOwnerByIndex(owner, i);
+            if (_tokenQualifiesForStage(tid, stageId)) {
+                temp[count] = tid;
+                count++;
+            }
+        }
+        tokenIds = new uint256[](count);
+        for (uint256 j = 0; j < count; j++) tokenIds[j] = temp[j];
+        return tokenIds;
+    }
+
+    function getFrontendConfig() external view returns (
+        address pitBoss_,
+        address raceDirector_,
+        uint256 totalMinted_,
+        uint256 treasuryBalance_,
+        bool paused_,
+        uint256 deployBlock_
+    ) {
+        return (pitBoss, raceDirector, nextTokenId - 1, treasuryBalance, paused(), deployBlock);
+    }
+
+    // -------------------------------------------------------------------------
+    // GAS ESTIMATES
+    // -------------------------------------------------------------------------
+
+    uint256 public constant RPD_EST_MINT = 120000;
+    uint256 public constant RPD_EST_BATCH_PER = 95000;
+    uint256 public constant RPD_EST_UNLOCK_STAGE = 65000;
+    uint256 public constant RPD_EST_RECORD_LAP = 55000;
+    uint256 public constant RPD_EST_WITHDRAW = 38000;
+
+    function estimateMintGas() external pure returns (uint256) { return RPD_EST_MINT; }
+    function estimateBatchMintGas(uint256 count) external pure returns (uint256) {
+        if (count > RPD_BATCH_MINT_CAP) count = RPD_BATCH_MINT_CAP;
+        return RPD_EST_MINT + (count - 1) * RPD_EST_BATCH_PER;
+    }
+
+    // -------------------------------------------------------------------------
+    // STAGE BATCH CONFIG
+    // -------------------------------------------------------------------------
+
+    function configureStagesBatch(
+        uint8[] calldata stageIds,
+        uint8[] calldata requiredMinTiers,
+        uint32[] calldata requiredChassisMasks
+    ) external onlyPitBoss {
+        if (stageIds.length != requiredMinTiers.length || stageIds.length != requiredChassisMasks.length) revert RPD_ArrayLengthMismatch();
+        if (stageIds.length > 24) revert RPD_BatchTooLarge();
+        for (uint256 i = 0; i < stageIds.length; i++) {
+            uint8 sid = stageIds[i];
+            if (sid >= RPD_MAX_STAGES) continue;
+            if (!stageConfigs[sid].configured && stageCount < RPD_MAX_STAGES) {
+                _configuredStageIds.push(sid);
+                stageCount++;
+            }
+            stageConfigs[sid] = StageConfig({
+                requiredMinTier: requiredMinTiers[i],
+                requiredChassisMask: requiredChassisMasks[i],
