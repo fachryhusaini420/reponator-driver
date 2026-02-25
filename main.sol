@@ -668,3 +668,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     // RECORD LAP BATCH
     // -------------------------------------------------------------------------
 
+    function recordLapBatch(
+        address[] calldata drivers,
+        uint256[] calldata tokenIds,
+        uint8[] calldata stageIds,
+        uint256[] calldata lapTimesMs
+    ) external onlyRaceDirector whenNotPausedContract {
+        if (drivers.length != tokenIds.length || drivers.length != stageIds.length || drivers.length != lapTimesMs.length) revert RPD_ArrayLengthMismatch();
+        if (drivers.length > RPD_BATCH_MINT_CAP) revert RPD_BatchTooLarge();
+        for (uint256 i = 0; i < drivers.length; i++) {
+            if (ownerOf(tokenIds[i]) != drivers[i]) continue;
+            if (!stageUnlockedByDriver[drivers[i]][stageIds[i]]) continue;
+            if (lapTimesMs[i] > RPD_LAP_TIME_SCALE_MS) continue;
+            uint8 cp = checkpointReachedByDriver[drivers[i]][stageIds[i]];
+            uint256 maxMs = checkpointLapTimeMaxMs[stageIds[i]][cp];
+            if (maxMs > 0 && lapTimesMs[i] > maxMs) continue;
+            emit LapRecorded(drivers[i], tokenIds[i], stageIds[i], lapTimesMs[i], block.number);
+            if (stageBestLapMs[stageIds[i]] == 0 || lapTimesMs[i] < stageBestLapMs[stageIds[i]]) {
+                stageBestLapMs[stageIds[i]] = lapTimesMs[i];
+                stageLeader[stageIds[i]] = drivers[i];
+                emit LeaderboardUpdated(stageIds[i], drivers[i], lapTimesMs[i], block.number);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PAGINATION & ENUMERATION
+    // -------------------------------------------------------------------------
+
+    function getTokenIdsPaginated(uint256 offset, uint256 limit) external view returns (uint256[] memory tokenIds, uint256 total) {
+        total = nextTokenId > 1 ? nextTokenId - 1 : 0;
+        if (offset >= total) return (new uint256[](0), total);
+        uint256 remain = total - offset;
+        if (limit > remain) limit = remain;
+        if (limit > 64) limit = 64;
+        tokenIds = new uint256[](limit);
+        for (uint256 i = 0; i < limit; i++) tokenIds[i] = offset + i + 1;
+        return (tokenIds, total);
+    }
+
+    function getCarsPaginated(uint256 offset, uint256 limit) external view returns (
+        uint256[] memory tokenIds,
+        uint8[] memory chassisTypes,
+        uint8[] memory engineTiers,
+        uint256 total
+    ) {
+        total = nextTokenId > 1 ? nextTokenId - 1 : 0;
+        if (offset >= total) return (new uint256[](0), new uint8[](0), new uint8[](0), total);
+        uint256 remain = total - offset;
+        if (limit > remain) limit = remain;
+        if (limit > 32) limit = 32;
+        tokenIds = new uint256[](limit);
+        chassisTypes = new uint8[](limit);
+        engineTiers = new uint8[](limit);
+        for (uint256 i = 0; i < limit; i++) {
+            uint256 tid = offset + i + 1;
+            tokenIds[i] = tid;
+            chassisTypes[i] = carChassisType[tid];
+            engineTiers[i] = carEngineTier[tid];
+        }
+        return (tokenIds, chassisTypes, engineTiers, total);
+    }
+
+    // -------------------------------------------------------------------------
+    // STAGE STATS
+    // -------------------------------------------------------------------------
+
+    function getStageStats(uint8 stageId) external view returns (
