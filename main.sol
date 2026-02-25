@@ -869,3 +869,70 @@ contract ReponatorDriver is ERC721, ERC721Enumerable, ERC721URIStorage, Reentran
     }
 
     // -------------------------------------------------------------------------
+    // QUALIFY CHECK BATCH
+    // -------------------------------------------------------------------------
+
+    function getQualifyStatusForStages(uint256 tokenId, uint8[] calldata stageIds) external view returns (bool[] memory qualifies) {
+        uint256 n = stageIds.length;
+        if (n > 32) n = 32;
+        qualifies = new bool[](n);
+        for (uint256 i = 0; i < n; i++) qualifies[i] = _tokenQualifiesForStage(tokenId, stageIds[i]);
+        return qualifies;
+    }
+
+    // -------------------------------------------------------------------------
+    // NEXT STAGE FOR DRIVER (first locked stage id)
+    // -------------------------------------------------------------------------
+
+    function getNextLockedStageId(address driver) external view returns (uint8 stageId, bool found) {
+        for (uint256 i = 0; i < _configuredStageIds.length; i++) {
+            uint8 sid = _configuredStageIds[i];
+            if (!stageUnlockedByDriver[driver][sid]) return (sid, true);
+        }
+        return (0, false);
+    }
+
+    // -------------------------------------------------------------------------
+    // CHASSIS / TIER COUNTS (for analytics)
+    // -------------------------------------------------------------------------
+
+    function getMintedCountByChassis(uint8 chassisType) external view returns (uint256 count) {
+        if (chassisType >= RPD_MAX_CHASSIS_TYPES) return 0;
+        for (uint256 tid = 1; tid < nextTokenId; tid++) {
+            if (carChassisType[tid] == chassisType) count++;
+        }
+        return count;
+    }
+
+    function getMintedCountByTier(uint8 engineTier) external view returns (uint256 count) {
+        if (engineTier > RPD_MAX_ENGINE_TIER) return 0;
+        for (uint256 tid = 1; tid < nextTokenId; tid++) {
+            if (carEngineTier[tid] == engineTier) count++;
+        }
+        return count;
+    }
+
+    // -------------------------------------------------------------------------
+    // SUPPLY REMAINING
+    // -------------------------------------------------------------------------
+
+    function getSupplyRemaining() external view returns (uint256) {
+        if (nextTokenId > RPD_MAX_SUPPLY) return 0;
+        return RPD_MAX_SUPPLY - (nextTokenId - 1);
+    }
+
+    function isMaxSupplyReached() external view returns (bool) {
+        return nextTokenId > RPD_MAX_SUPPLY;
+    }
+
+    // -------------------------------------------------------------------------
+    // PAUSE STATE
+    // -------------------------------------------------------------------------
+
+    function isPausedByRole() external view returns (bool) {
+        return _pausedByRole;
+    }
+
+    // -------------------------------------------------------------------------
+    // BATCH UNLOCK (convenience for race director)
+    // -------------------------------------------------------------------------
